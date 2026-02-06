@@ -106,6 +106,7 @@ async function writeBuildkitdTomlFile(
         gc: false,
         "max-parallelism": parallelism,
         snapshotter: "overlayfs",
+        namespace: "default",
       },
     },
   };
