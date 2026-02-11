@@ -276,7 +276,7 @@ export async function getStickyDisk(options?: {
     throw new Error(`grpc connection test failed: ${(error as Error).message}`);
   }
 
-  const stickyDiskKey = process.env.GITHUB_REPO_NAME || "";
+  const stickyDiskKey = (process.env.GITHUB_REPO_NAME || "") + '-containerd';
   if (stickyDiskKey === "") {
     throw new Error("GITHUB_REPO_NAME is not set");
   }
