@@ -65,7 +65,7 @@ export async function reportBuildPushActionFailure(
   event?: string,
 ) {
   const requestOptions = {
-    stickydisk_key: process.env.GITHUB_REPO_NAME || "",
+    stickydisk_key: (process.env.GITHUB_REPO_NAME || "") + '-containerd',
     repo_name: process.env.GITHUB_REPO_NAME || "",
     region: process.env.BLACKSMITH_REGION || "eu-central",
     arch: process.env.BLACKSMITH_ENV?.includes("arm") ? "arm64" : "amd64",
@@ -165,7 +165,7 @@ export async function commitStickyDisk(
 
     const commitRequest: Record<string, unknown> = {
       exposeId: exposeId,
-      stickyDiskKey: process.env.GITHUB_REPO_NAME || "",
+      stickyDiskKey: (process.env.GITHUB_REPO_NAME || "") + '-containerd',
       vmId: process.env.BLACKSMITH_VM_ID || "",
       shouldCommit: true,
       repoName: process.env.GITHUB_REPO_NAME || "",
