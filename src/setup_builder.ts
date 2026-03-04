@@ -525,15 +525,31 @@ export async function setupStickyDisk(): Promise<{
     // Buildkitd connects to containerd via the socket (worker.containerd), so containerd
     // must be running with its state directory pointing at the sticky disk before buildkitd starts.
     await execAsync(`sudo mkdir -p ${mountPoint}/containerd`);
+
+    // If buildkit cache exists but containerd state is fresh, the cache has stale
+    // references to snapshots that lived in the old ephemeral containerd. Wipe it.
+    try {
+      const { stdout } = await execAsync(
+        `find ${mountPoint}/containerd -mindepth 1 -maxdepth 1 2>/dev/null | head -1`,
+      );
+      if (!stdout.trim() && fs.existsSync(`${mountPoint}/cache.db`)) {
+        core.warning('Existing buildkit cache with empty containerd state — wiping stale cache');
+        await execAsync(`sudo rm -rf ${mountPoint}/cache.db ${mountPoint}/history.db ${mountPoint}/runc-overlayfs ${mountPoint}/containerd-overlayfs`);
+      }
+    } catch (error) {
+      core.debug(`Error checking containerd state: ${(error as Error).message}`);
+    }
+
     await execAsync(`sudo systemctl stop containerd || true`);
     await execAsync(`sudo rm -rf /var/lib/containerd`);
     await execAsync(`sudo ln -sfn ${mountPoint}/containerd /var/lib/containerd`);
     await execAsync(`sudo systemctl start containerd`);
     core.info('Containerd state symlinked to sticky disk and restarted');
 
-    // Consistency check: verify containerd can operate against the persisted state.
-    // Stale metadata from a killed run can leave containerd in a broken state, which
-    // would propagate into buildkitd. If the check fails, wipe and restart cleanly.
+    // Consistency check: protect against corrupted containerd state from a killed run.
+    // The empty-dir check above handles the one-time migration (containerd was never on
+    // the sticky disk); this handles ongoing corruption (containerd was on the sticky disk
+    // but got partially written before the job was terminated).
     try {
       await execAsync('sudo ctr -n default images list -q');
       core.info('Containerd consistency check passed');
