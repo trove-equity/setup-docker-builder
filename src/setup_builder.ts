@@ -532,7 +532,11 @@ export async function setupStickyDisk(): Promise<{
       const { stdout } = await execAsync(
         `find ${mountPoint}/containerd -mindepth 1 -maxdepth 1 2>/dev/null | head -1`,
       );
-      if (!stdout.trim() && fs.existsSync(`${mountPoint}/cache.db`)) {
+      const containerdEmpty = !stdout.trim();
+      const cacheExists = fs.existsSync(`${mountPoint}/cache.db`);
+      core.info(`Migration check: containerd dir empty=${containerdEmpty}, cache.db exists=${cacheExists}`);
+
+      if (containerdEmpty && cacheExists) {
         core.warning('Existing buildkit cache with empty containerd state — wiping stale cache');
         await execAsync(`sudo rm -rf ${mountPoint}/cache.db ${mountPoint}/history.db ${mountPoint}/runc-overlayfs ${mountPoint}/containerd-overlayfs`);
       }
