@@ -533,7 +533,10 @@ export async function setupStickyDisk(): Promise<{
         `find ${mountPoint}/containerd -mindepth 1 -maxdepth 1 2>/dev/null | head -1`,
       );
       const containerdEmpty = !stdout.trim();
-      const cacheExists = fs.existsSync(`${mountPoint}/cache.db`);
+      const { stdout: cacheCheck } = await execAsync(
+        `test -f ${mountPoint}/cache.db && echo "exists" || echo "missing"`,
+      );
+      const cacheExists = cacheCheck.trim() === 'exists';
       core.info(`Migration check: containerd dir empty=${containerdEmpty}, cache.db exists=${cacheExists}`);
 
       if (containerdEmpty && cacheExists) {
