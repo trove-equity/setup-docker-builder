@@ -520,6 +520,35 @@ export async function setupStickyDisk(): Promise<{
     // Log database file hashes after mount
     await logDatabaseHashes("after mount");
 
+    // Persist containerd state on the sticky disk alongside buildkit.
+    // Ordering: mount sticky disk → stop containerd → symlink → start containerd → start buildkitd.
+    // Buildkitd connects to containerd via the socket (worker.containerd), so containerd
+    // must be running with its state directory pointing at the sticky disk before buildkitd starts.
+    await execAsync(`sudo mkdir -p ${mountPoint}/containerd`);
+    await execAsync(`sudo systemctl stop containerd || true`);
+    await execAsync(`sudo rm -rf /var/lib/containerd`);
+    await execAsync(`sudo ln -sfn ${mountPoint}/containerd /var/lib/containerd`);
+    await execAsync(`sudo systemctl start containerd`);
+    core.info('Containerd state symlinked to sticky disk and restarted');
+
+    // Consistency check: verify containerd can operate against the persisted state.
+    // Stale metadata from a killed run can leave containerd in a broken state, which
+    // would propagate into buildkitd. If the check fails, wipe and restart cleanly.
+    try {
+      await execAsync('sudo ctr -n default images list -q');
+      core.info('Containerd consistency check passed');
+    } catch (error) {
+      core.warning(
+        `Containerd consistency check failed, wiping state: ${(error as Error).message}`,
+      );
+      await execAsync(`sudo systemctl stop containerd || true`);
+      await execAsync(`sudo rm -rf ${mountPoint}/containerd`);
+      await execAsync(`sudo rm -rf ${mountPoint}/cache.db ${mountPoint}/history.db ${mountPoint}/runc-overlayfs ${mountPoint}/containerd-overlayfs`);
+      await execAsync(`sudo mkdir -p ${mountPoint}/containerd`);
+      await execAsync(`sudo systemctl start containerd`);
+      core.info('Containerd state wiped and restarted after failed consistency check');
+    }
+
     return { device, exposeId };
   } catch (error) {
     core.warning(`Error in setupStickyDisk: ${(error as Error).message}`);
